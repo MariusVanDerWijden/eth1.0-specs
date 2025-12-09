@@ -247,6 +247,42 @@ def test_xcall(
     )
 
 
+def test_contract_calling_many_addresses(
+    benchmark_test: BenchmarkTestFiller,
+    pre: Alloc,
+    fork: Fork,
+) -> None:
+    """
+    Benchmark a contract that calls many addresses.
+
+    Creates a contract that generates addresses dynamically using KECCAK256
+    and calls each one with 1 wei. The contract loops until it runs out of gas.
+    """
+    # Build contract code that generates addresses and calls them
+    # Pattern:
+    # 1. Store NUMBER in memory[0] (32 bytes)
+    # 2. JUMPDEST (loop start)
+    # 3. Update memory[0] with KECCAK256(memory[0], 32)
+    # 4. CALL address from memory[0] (first 20 bytes) with 1 wei
+    # 5. JUMP back to JUMPDEST
+    setup = Op.MSTORE(0, Op.NUMBER())  # Initialize with block number
+    attack_block = (
+        Op.MSTORE(0, Op.SHA3(0, 32))  # Generate new address via hash
+        + Op.CALL(
+            address=Op.MLOAD(0),  # Load address from memory (first 20 bytes)
+            value=1,  # Send 1 wei
+        )
+        + Op.POP  # Discard CALL success status
+    )
+
+    benchmark_test(
+        code_generator=JumpLoopGenerator(
+            setup=setup,
+            attack_block=attack_block,
+        )
+    )
+
+
 @pytest.mark.parametrize(
     "opcode",
     [
