@@ -257,7 +257,15 @@ def test_contract_calling_many_addresses(
 
     Creates a contract that generates addresses dynamically using KECCAK256
     and calls each one with 1 wei.
+    Stop when the gas is less than the loop cost.
     """
+    gas_costs = fork.gas_costs()
+    loop_cost = (
+        gas_costs.G_VERY_LOW * 3  # ~MSTOREs+ADDs
+        + gas_costs.G_COLD_ACCOUNT_ACCESS  # CALL cost
+        + gas_costs.G_CALL_VALUE  # Value transfer cost
+        + gas_costs.G_LOW * 3  # ~Gluing opcodes
+    )
     # Build contract code that generates addresses and calls them
     # Pattern:
     # 1. Store Keccak256(NUMBER) in memory[0] (32 bytes)
@@ -266,6 +274,7 @@ def test_contract_calling_many_addresses(
     # 5. Update memory[0] with ADD(memory[0], 1)
     # 6. JUMP back to JUMPDEST
     setup = Op.MSTORE(0, Op.NUMBER())  # Initialize with block number
+    destination = Op.JUMPDEST()
     attack_block = Op.MSTORE(
         0,
         Op.ADD(
@@ -276,6 +285,8 @@ def test_contract_calling_many_addresses(
             ),
         ),
     )
+    attack_block += Op.JUMPI(Op.GT(Op.GAS, loop_cost), destination)
+    attack_block += Op.RETURN(0, 0)
 
     benchmark_test(
         code_generator=JumpLoopGenerator(
