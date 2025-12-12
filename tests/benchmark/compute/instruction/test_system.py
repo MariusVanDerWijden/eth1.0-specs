@@ -256,23 +256,25 @@ def test_contract_calling_many_addresses(
     Benchmark a contract that calls many addresses.
 
     Creates a contract that generates addresses dynamically using KECCAK256
-    and calls each one with 1 wei. The contract loops until it runs out of gas.
+    and calls each one with 1 wei.
     """
     # Build contract code that generates addresses and calls them
     # Pattern:
-    # 1. Store NUMBER in memory[0] (32 bytes)
+    # 1. Store Keccak256(NUMBER) in memory[0] (32 bytes)
     # 2. JUMPDEST (loop start)
-    # 3. Update memory[0] with KECCAK256(memory[0], 32)
     # 4. CALL address from memory[0] (first 20 bytes) with 1 wei
-    # 5. JUMP back to JUMPDEST
+    # 5. Update memory[0] with ADD(memory[0], 1)
+    # 6. JUMP back to JUMPDEST
     setup = Op.MSTORE(0, Op.NUMBER())  # Initialize with block number
-    attack_block = (
-        Op.MSTORE(0, Op.SHA3(0, 32))  # Generate new address via hash
-        + Op.CALL(
-            address=Op.MLOAD(0),  # Load address from memory (first 20 bytes)
-            value=1,  # Send 1 wei
-        )
-        + Op.POP  # Discard CALL success status
+    attack_block = Op.MSTORE(
+        0,
+        Op.ADD(
+            1,
+            Op.CALL(
+                address=Op.MLOAD(0),  # Load address from memory
+                value=1,  # Send 1 wei
+            ),
+        ),
     )
 
     benchmark_test(
